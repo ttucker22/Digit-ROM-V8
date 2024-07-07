@@ -821,46 +821,54 @@ const OPPOSITIONData = [
     }
 
     // Finger impairment calculation functions
-    function lookupfingerDTImpairment(angle, jointType, motionType) {
-        console.log(`lookupfingerDTImpairment called with: angle=${angle}, jointType=${jointType}, motionType=${motionType}`);
-        try {
-            let data;
-            if (jointType === 'DIP') {
-                data = DIPData;
-            } else if (jointType === 'PIP') {
-                data = PIPData;
-            } else if (jointType === 'MP') {
-                data = FINGERMPData;
-            } else {
-                throw new Error('Invalid joint type');
-            }
-
-            let dtImpairment = null;
-            for (let i = 0; i < data.length; i++) {
-                const row = data[i];
-                if (motionType === 'flexion' && (angle <= row.flexion || row.flexion === '<-30' && angle < -30)) {
-                    dtImpairment = row.dtFlexion;
-                    break;
-                } else if (motionType === 'extension' && (angle <= row.extension || row.extension === '<-70' && angle < -70)) {
-                    dtImpairment = row.dtExtension;
-                    break;
-                } else if (motionType === 'ankylosis' && (angle <= row.ankylosis || row.ankylosis === '<-30' && angle < -30)) {
-                    dtImpairment = row.dtAnkylosis;
-                    break;
-                }
-            }
-
-            if (dtImpairment === null) {
-                throw new Error('Angle out of range');
-            }
-
-            console.log(`lookupfingerDTImpairment result: ${dtImpairment}`);
-            return dtImpairment;
-        } catch (error) {
-            console.error('Error in lookupfingerDTImpairment:', error);
-            return 0;
+function lookupfingerDTImpairment(angle, jointType, motionType) {
+    console.log(`lookupfingerDTImpairment called with: angle=${angle}, jointType=${jointType}, motionType=${motionType}`);
+    try {
+        let data;
+        if (jointType === 'DIP') {
+            data = DIPData;
+        } else if (jointType === 'PIP') {
+            data = PIPData;
+        } else if (jointType === 'MP') {
+            data = FINGERMPData;
+        } else {
+            throw new Error('Invalid joint type');
         }
+
+        let dtImpairment = null;
+        
+        // Handle special cases for ankylosis
+        if (motionType === 'ankylosis') {
+            if (jointType === 'DIP' && angle > 70) return 45;
+            if (jointType === 'PIP' && angle > 100) return 80;
+            if (jointType === 'MP' && angle > 90) return 100;
+        }
+
+        for (let i = 0; i < data.length; i++) {
+            const row = data[i];
+            if (motionType === 'flexion' && (angle <= row.flexion || row.flexion === '<-30' && angle < -30)) {
+                dtImpairment = row.dtFlexion;
+                break;
+            } else if (motionType === 'extension' && (angle <= row.extension || row.extension === '<-70' && angle < -70)) {
+                dtImpairment = row.dtExtension;
+                break;
+            } else if (motionType === 'ankylosis' && (angle <= row.ankylosis || row.ankylosis === '<-30' && angle < -30)) {
+                dtImpairment = row.dtAnkylosis;
+                break;
+            }
+        }
+
+        if (dtImpairment === null) {
+            throw new Error('Angle out of range');
+        }
+
+        console.log(`lookupfingerDTImpairment result: ${dtImpairment}`);
+        return dtImpairment;
+    } catch (error) {
+        console.error('Error in lookupfingerDTImpairment:', error);
+        return 0;
     }
+}
 
 function combinefingerImpairments(impairments) {
     console.log('combinefingerImpairments called with:', impairments);
@@ -917,44 +925,61 @@ function combinefingerImpairments(impairments) {
 
     // Thumb impairment calculation functions
     function calculateThumbImpairment(value, dataArray, type) {
-        console.log(`calculateThumbImpairment called with: value=${value}, type=${type}`);
-        try {
-            if (value === "" || isNaN(value)) {
-                return 0;
-            }
-            value = parseFloat(value);
-            let row;
-            
-            if (type === 'radialAbduction' || type === 'cm') {
-                row = dataArray.find(r => r[type] === value) || 
-                      dataArray.find(r => r[type] === `>${Math.abs(value)}`) ||
-                      dataArray.find(r => r[type] === `<${Math.abs(value)}`);
-            } else if (type === 'ankylosis' && (dataArray === RADIALABDUCTIONData || dataArray === ADDUCTIONData || dataArray === OPPOSITIONData)) {
-                const lookupType = dataArray === RADIALABDUCTIONData ? 'radialAbduction' : 'cm';
-                row = dataArray.find(r => r[lookupType] === value) || 
-                      dataArray.find(r => r[lookupType] === `>${Math.abs(value)}`) ||
-                      dataArray.find(r => r[lookupType] === `<${Math.abs(value)}`);
-            } else {
-                row = dataArray.find(r => r[type] === value);
-            }
-            
-            let result = 0;
-            if (row) {
-                if (type === 'radialAbduction' || type === 'cm') {
-                    result = row.dtAbnormalMotion || 0;
-                } else if (type === 'ankylosis') {
-                    result = row.dtAnkylosis || 0;
-                } else {
-                    result = row[`dt${type.charAt(0).toUpperCase() + type.slice(1)}`] || 0;
-                }
-            }
-            console.log('calculateThumbImpairment result:', result);
-            return result;
-        } catch (error) {
-            console.error('Error in calculateThumbImpairment:', error);
+    console.log(`calculateThumbImpairment called with: value=${value}, type=${type}`);
+    try {
+        if (value === "" || isNaN(value)) {
             return 0;
         }
+        value = parseFloat(value);
+        let row;
+        
+        // Handle special cases
+        if (dataArray === IPData) {
+            if ((type === 'flexion' && value < -30) || (type === 'extension' && value < -80) || (type === 'ankylosis' && (value < -30 || value > 80))) {
+                return 15;
+            }
+        } else if (dataArray === THUMBMPData) {
+            if ((type === 'flexion' && value < -40) || (type === 'extension' && value < -60) || (type === 'ankylosis' && (value < -40 || value > 60))) {
+                return 10;
+            }
+        } else if (dataArray === RADIALABDUCTIONData && type === 'ankylosis' && value > 50) {
+            return 9;
+        } else if (dataArray === ADDUCTIONData && value > 8) {
+            return 20;
+        } else if (dataArray === OPPOSITIONData && type === 'ankylosis' && value > 8) {
+            return 29;
+        }
+        
+        if (type === 'radialAbduction' || type === 'cm') {
+            row = dataArray.find(r => r[type] === value) || 
+                  dataArray.find(r => r[type] === `>${Math.abs(value)}`) ||
+                  dataArray.find(r => r[type] === `<${Math.abs(value)}`);
+        } else if (type === 'ankylosis' && (dataArray === RADIALABDUCTIONData || dataArray === ADDUCTIONData || dataArray === OPPOSITIONData)) {
+            const lookupType = dataArray === RADIALABDUCTIONData ? 'radialAbduction' : 'cm';
+            row = dataArray.find(r => r[lookupType] === value) || 
+                  dataArray.find(r => r[lookupType] === `>${Math.abs(value)}`) ||
+                  dataArray.find(r => r[lookupType] === `<${Math.abs(value)}`);
+        } else {
+            row = dataArray.find(r => r[type] === value);
+        }
+        
+        let result = 0;
+        if (row) {
+            if (type === 'radialAbduction' || type === 'cm') {
+                result = row.dtAbnormalMotion || 0;
+            } else if (type === 'ankylosis') {
+                result = row.dtAnkylosis || 0;
+            } else {
+                result = row[`dt${type.charAt(0).toUpperCase() + type.slice(1)}`] || 0;
+            }
+        }
+        console.log('calculateThumbImpairment result:', result);
+        return result;
+    } catch (error) {
+        console.error('Error in calculateThumbImpairment:', error);
+        return 0;
     }
+}
 
     function clearAllInputs() {
         console.log('clearAllInputs called');
